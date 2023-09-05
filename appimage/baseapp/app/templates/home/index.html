@@ -1,0 +1,14 @@
+<!-- templates/index.html -->
+
+{% extends "../_base.html" %}
+
+{% block content %}
+  <h1>Hello World</h1>
+
+  <button
+    hx-get="/api/test?format=txt"
+    hx-target="#output">
+    Click to test htmx
+  </button>  
+  <p id="output"></p>
+{% endblock content %}

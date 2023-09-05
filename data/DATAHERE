@@ -1,0 +1,3 @@
+This is a placeholder to ensure that there will be a `data` directory on clone.
+
+Any persistent directories for docker-compose should be pointed here with a descriptive name at the top level.
