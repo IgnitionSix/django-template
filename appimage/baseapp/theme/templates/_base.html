@@ -1,5 +1,6 @@
 <!-- templates/_base.html -->
 {% load compress %}
+{% load django_browser_reload %}
 {% load static %}
 {% load static tailwind_tags %}
 
@@ -10,7 +11,9 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Default Application Title</title>
+    {% compress css %}
     {% tailwind_css %}
+    {% endcompress %}
   </head>
   <body class="bg-blue-100">
     {% block content %}
@@ -24,5 +27,6 @@
           event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
         })
       </script>
+      {% django_browser_reload_script %}
   </body>
 </html>
