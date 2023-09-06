@@ -1,7 +1,7 @@
 
 from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent / "theme"
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -14,6 +14,7 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'django_filters',
     'tailwind',
+    'theme',
     'home',  
     'api',
     'compressor',
@@ -93,7 +94,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Compressor settings
 
 COMPRESS_ROOT = BASE_DIR / 'static'
-
 COMPRESS_ENABLED = True
 
 STATICFILES_FINDERS = ('compressor.finders.CompressorFinder',)
@@ -117,3 +117,5 @@ SPECTACULAR_SETTINGS = {
     'VERSION': '1.0.0',
     # OTHER SETTINGS
 }
+
+TAILWIND_APP_NAME = 'theme'
