@@ -23,10 +23,10 @@
         <script type="text/javascript" src="{% static 'js/htmx.js' %}"></script>
     {% endcompress %}
     <script>
-        document.body.addEventListener('htmx:configRequest', (event) => {
-          event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
-        })
-      </script>
-      {% django_browser_reload_script %}
+      document.body.addEventListener('htmx:configRequest', (event) => {
+        event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
+      })
+    </script>
+    {% django_browser_reload_script %}
   </body>
 </html>

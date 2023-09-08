@@ -1,6 +1,6 @@
 # django-template
 
-The Ignition 6 django-template project is an opionated framework for creating modern web apps with [Django](https://www.djangoproject.com), [Django Rest Framework](https://www.django-rest-framework.org), [Tailwind](https://tailwindcss.com) , [django-tailwind](https://github.com/timonweb/django-tailwind), [Elasticsearch](https://www.elastic.co) and [HTMX](https://htmx.org). It has built-in github workflow actions to run your tests automatically as part of your build process.
+The Ignition 6 django-template project is a mildly opionated framework for creating modern web apps with [Django](https://www.djangoproject.com), [Django Rest Framework](https://www.django-rest-framework.org), [Tailwind](https://tailwindcss.com) , [django-tailwind](https://github.com/timonweb/django-tailwind), [Elasticsearch](https://www.elastic.co) and [HTMX](https://htmx.org). It has built-in github workflow actions to run your tests automatically as part of your build process.
 
 
 ## prerequisites
