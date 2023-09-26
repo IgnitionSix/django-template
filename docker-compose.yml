@@ -36,9 +36,10 @@ services:
   db:
     image: postgres
     volumes:
-      - ./data/postgres:/var/lib/postgresql
+      - ./data/postgres:/var/lib/postgresql/data/
     environment:
       <<: *common-variables
+      POSTGRES_HOST_AUTH_METHOD: trust
     networks:
         - backend
 

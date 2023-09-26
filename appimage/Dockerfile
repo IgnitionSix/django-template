@@ -17,7 +17,7 @@ COPY baseapp/requirements*.txt ./
 
 RUN pip install -r requirements.txt
 
-COPY ./baseapp /code/
+COPY ./baseapp /code/baseapp
 
 WORKDIR /code/
 
