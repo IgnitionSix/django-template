@@ -10,29 +10,56 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v3
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
-      - name: Install dependencies
+          python-version: "3.13"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: appimage/baseapp/core/static_src/package-lock.json
+
+      - name: Install Python dependencies
         working-directory: ./appimage/baseapp
         run: |
           python -m pip install --upgrade pip
-          pip install flake8 pytest
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-      - name: Lint with flake8
+          pip install -r requirements.txt
+
+      - name: Install frontend dependencies
+        working-directory: ./appimage/baseapp/core/static_src
+        run: npm ci
+
+      - name: Build frontend assets
+        working-directory: ./appimage/baseapp/core/static_src
+        run: npm run build
+
+      - name: Ruff
         working-directory: ./appimage/baseapp
         run: |
-          # stop the build if there are Python syntax errors or undefined names
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-      - name: Test with django unittest
+          ruff check .
+          ruff format --check .
+
+      - name: Django tests
         working-directory: ./appimage/baseapp
-        run: |
-          python manage.py test --settings=app.settings.test
+        run: python manage.py test --settings=app.settings.test
+
+      - name: Django deploy check with sample env
+        working-directory: ./appimage/baseapp
+        env:
+          DJANGO_SECRET_KEY: ci-secret-0123456789abcdefghijklmnopqrstuvwxyz-ABCDEFGHIJKLMNOPQRSTUVWXYZ
+          DJANGO_ALLOWED_HOSTS: example.com
+          DJANGO_CSRF_TRUSTED_ORIGINS: https://example.com
+          POSTGRES_DB: defaultapp
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_HOST: localhost
+        run: python manage.py check --deploy --fail-level WARNING --settings=app.settings.production

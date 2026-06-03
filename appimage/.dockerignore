@@ -1,0 +1,15 @@
+.DS_Store
+baseapp/.DS_Store
+baseapp/**/.DS_Store
+
+baseapp/.venv/
+baseapp/**/__pycache__/
+baseapp/**/*.pyc
+baseapp/**/*.pyo
+
+baseapp/**/node_modules/
+baseapp/**/CACHE/
+baseapp/staticfiles/
+baseapp/.pytest_cache/
+baseapp/.mypy_cache/
+baseapp/.ruff_cache/

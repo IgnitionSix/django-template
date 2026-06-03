@@ -1,0 +1,34 @@
+aws_region   = "us-east-1"
+project_name = "my-django-app"
+environment  = "dev"
+
+# Keep desired_task_count at 0 for the first apply. After Terraform creates ECR,
+# build and push your image, set container_image to that pushed tag, then set this
+# to 1 or more.
+desired_task_count = 0
+container_image    = "REPLACE_WITH_ECR_REPOSITORY_URL:latest"
+
+# Optional domain support. Leave certificate_arn null to use the ALB HTTP URL
+# during the first bootstrap.
+certificate_arn = null
+domain_names    = []
+
+# Cost posture:
+# - Defaults run ECS tasks in public subnets with SG ingress only from the ALB.
+# - For private ECS tasks, set enable_nat_gateway=true,
+#   ecs_use_private_subnets=true, and ecs_assign_public_ip=false.
+enable_nat_gateway    = false
+ecs_use_private_subnets = false
+ecs_assign_public_ip  = true
+
+# Tighten this for private/internal apps.
+allowed_ingress_cidrs = ["0.0.0.0/0"]
+
+# RDS and Redis defaults are intentionally small.
+rds_instance_class = "db.t4g.micro"
+redis_node_type    = "cache.t4g.micro"
+
+# For production, consider:
+# alb_deletion_protection = true
+# rds_deletion_protection  = true
+# rds_skip_final_snapshot  = false
