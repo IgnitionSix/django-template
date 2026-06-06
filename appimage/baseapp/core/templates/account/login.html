@@ -1,0 +1,16 @@
+{% extends "_base.html" %}
+
+{% block title %}Sign in{% endblock title %}
+
+{% block content %}
+  <section class="mx-auto max-w-md space-y-6">
+    <h1 class="text-2xl font-semibold">Sign in</h1>
+    <form method="post" action="{% url 'account_login' %}" class="space-y-4">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button class="rounded bg-slate-950 px-4 py-2 text-sm font-medium text-white" type="submit">
+        Sign in
+      </button>
+    </form>
+  </section>
+{% endblock content %}

@@ -1,48 +1,95 @@
-version: '3.4'
-
-x-common-variables: &common-variables
-  S3_HOST: "s3:9000"
-  S3_ACCESS_KEY: "minio"
-  S3_ACCESS_SECRET: "miniominio"
-  S3_BUCKET_NAME: "default_bucket"
-  POSTGRES_DB: defaultapp
-  POSTGRES_USER: postgres
-  POSTGRES_PASSWORD: postgres
-  POSTGRES_HOST: db
-  ENVIRONMENT: local
-  
-x-app: &default-app
-  build: ./appimage
-  volumes:
-    - ./appimage/baseapp:/code/baseapp
-  networks:
-    - backend
-
 services:
-        
   db:
-    image: postgres
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: defaultapp
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     volumes:
       - ./data/postgres:/var/lib/postgresql/data/
-    environment:
-      <<: *common-variables
-      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     networks:
-        - backend
+      - backend
+
+  redis:
+    image: redis:7-alpine
+    networks:
+      - backend
 
   app:
-    <<: *default-app
+    build: ./appimage
+    command: /bin/sh /code/baseapp/run.sh
     environment:
-      <<: *common-variables
+      DJANGO_SETTINGS_MODULE: app.settings.local
+      POSTGRES_DB: defaultapp
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_HOST: db
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: local
+    volumes:
+      - ./appimage/baseapp:/code/baseapp
     ports:
       - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - backend
+
+  worker:
+    build: ./appimage
+    command: >
+      /bin/sh -c "until pg_isready -h \"$${POSTGRES_HOST:-db}\" -U \"$${POSTGRES_USER:-postgres}\" -d \"$${POSTGRES_DB:-defaultapp}\"; do
+        echo 'Waiting for postgres...';
+        sleep 2;
+      done;
+      python manage.py migrate --settings=app.settings.local;
+      python manage.py process_tasks --settings=app.settings.local"
+    environment:
+      DJANGO_SETTINGS_MODULE: app.settings.local
+      POSTGRES_DB: defaultapp
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_HOST: db
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: local
+    volumes:
+      - ./appimage/baseapp:/code/baseapp
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - backend
 
   tailwind:
-    <<: *default-app
+    build: ./appimage
     command: /bin/sh /code/baseapp/run_tailwind.sh
+    environment:
+      DJANGO_SETTINGS_MODULE: app.settings.local
+      POSTGRES_DB: defaultapp
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_HOST: db
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: local
+    volumes:
+      - ./appimage/baseapp:/code/baseapp
+    depends_on:
+      app:
+        condition: service_started
     tty: true
-      
+    networks:
+      - backend
+
 networks:
   backend:
-    driver: "bridge"
-    
+    driver: bridge

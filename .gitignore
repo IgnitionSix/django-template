@@ -60,6 +60,7 @@ cover/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
+staticfiles/
 
 # Flask stuff:
 instance/
@@ -111,6 +112,7 @@ ipython_config.py
 
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
 __pypackages__/
+node_modules/
 
 # Celery stuff
 celerybeat-schedule
@@ -163,3 +165,10 @@ data/postgres
 data/s3
 api/venv
 CACHE
+
+# Terraform local state and provider caches
+**/.terraform/
+*.tfstate
+*.tfstate.*
+terraform/**/terraform.tfvars
+terraform/**/backend.hcl

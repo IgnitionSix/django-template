@@ -1,0 +1,26 @@
+{% load static %}
+{% load django_browser_reload %}
+{% load tailwind_tags %}
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Django Template{% endblock title %}</title>
+    {% tailwind_css %}
+    <meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false}'>
+    <script src="{% static 'js/htmx.min.js' %}" defer></script>
+    <script src="{% static 'js/alpine.min.js' %}" defer></script>
+    <script src="{% static 'js/chart.umd.min.js' %}" defer></script>
+    <script src="{% static 'js/app.js' %}" defer></script>
+  </head>
+  <body class="min-h-screen bg-slate-50 text-slate-950">
+    <main class="mx-auto max-w-5xl px-6 py-10">
+      {% block content %}{% endblock content %}
+    </main>
+    {% if debug %}
+      {% django_browser_reload_script %}
+    {% endif %}
+  </body>
+</html>

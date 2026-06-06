@@ -1,27 +1,27 @@
-FROM python:3
-ENV PYTHONUNBUFFERED 1
-ENV NODE_VERSION=18.17.1
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    NODE_VERSION=22
+
 WORKDIR /code
-RUN apt install -y curl
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
-ENV NVM_DIR=/root/.nvm
-RUN . "$NVM_DIR/nvm.sh" && nvm install ${NODE_VERSION}
-RUN . "$NVM_DIR/nvm.sh" && nvm use v${NODE_VERSION}
-RUN . "$NVM_DIR/nvm.sh" && nvm alias default v${NODE_VERSION}
-ENV PATH="/root/.nvm/versions/node/v${NODE_VERSION}/bin/:${PATH}"
-ENV PATH="${PATH}:/home/python/.local/bin"
-RUN node --version
-RUN npm --version
 
-COPY baseapp/requirements*.txt ./
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl postgresql-client ca-certificates \
+    && curl -fsSL "https://deb.nodesource.com/setup_${NODE_VERSION}.x" | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN pip install -r requirements.txt
+COPY baseapp/requirements.txt /code/requirements.txt
+RUN pip install --no-cache-dir -r /code/requirements.txt
 
-COPY ./baseapp /code/baseapp
+COPY baseapp /code/baseapp
+WORKDIR /code/baseapp
 
-WORKDIR /code/
+RUN if [ -f core/static_src/package-lock.json ]; then \
+        cd core/static_src && npm ci && npm run build; \
+    fi
 
-#For some reason, django-tailwind doesn't install packages to a place that django can find them, so we'll do it manually
-RUN npm install cross-env postcss postcss-loader postcss-import postcss-cssnext postcss-simple-vars postcss-nested
+RUN python manage.py collectstatic --noinput --settings=app.settings.base
 
-CMD ["/bin/sh","-c","./baseapp/run.sh"]
+CMD ["gunicorn", "app.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--access-logfile", "-", "--error-logfile", "-"]
