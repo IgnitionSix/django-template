@@ -1,5 +1,6 @@
 Django==5.2.14
 django-allauth==65.18.0
+django-background-tasks==1.2.8
 django-browser-reload==1.21.0
 django-csp==4.0
 django-ratelimit==4.1.0

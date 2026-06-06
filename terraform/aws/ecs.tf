@@ -73,6 +73,47 @@ resource "aws_ecs_task_definition" "app" {
   ])
 }
 
+resource "aws_ecs_task_definition" "background_worker" {
+  family                   = "${local.name_prefix}-background-worker"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = var.task_cpu
+  memory                   = var.task_memory
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "background-worker"
+      image     = var.container_image
+      essential = true
+      command   = var.background_worker_command
+
+      environment = local.common_environment
+
+      secrets = [
+        {
+          name      = "DJANGO_SECRET_KEY"
+          valueFrom = aws_secretsmanager_secret.django_secret_key.arn
+        },
+        {
+          name      = "POSTGRES_PASSWORD"
+          valueFrom = "${aws_secretsmanager_secret.database.arn}:password::"
+        },
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.app.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "background-worker"
+        }
+      }
+    }
+  ])
+}
+
 resource "aws_ecs_service" "app" {
   name            = "${local.name_prefix}-service"
   cluster         = aws_ecs_cluster.app.id
@@ -102,4 +143,23 @@ resource "aws_ecs_service" "app" {
     aws_lb_listener.http_redirect,
     aws_lb_listener.https,
   ]
+}
+
+resource "aws_ecs_service" "background_worker" {
+  name            = "${local.name_prefix}-background-worker"
+  cluster         = aws_ecs_cluster.app.id
+  task_definition = aws_ecs_task_definition.background_worker.arn
+  desired_count   = var.background_worker_desired_count
+  launch_type     = "FARGATE"
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  network_configuration {
+    subnets          = local.ecs_subnet_ids
+    security_groups  = [aws_security_group.ecs.id]
+    assign_public_ip = var.ecs_assign_public_ip
+  }
 }

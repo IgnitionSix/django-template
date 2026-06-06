@@ -23,6 +23,11 @@ output "ecs_service_name" {
   value       = aws_ecs_service.app.name
 }
 
+output "ecs_background_worker_service_name" {
+  description = "ECS service name for the background task worker."
+  value       = aws_ecs_service.background_worker.name
+}
+
 output "ecs_task_definition_family" {
   description = "ECS task definition family for one-off tasks."
   value       = aws_ecs_task_definition.app.family

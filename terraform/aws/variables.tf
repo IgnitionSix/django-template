@@ -134,6 +134,18 @@ variable "desired_task_count" {
   default     = 0
 }
 
+variable "background_worker_desired_count" {
+  description = "Number of background task worker ECS tasks to run. Keep 0 until your Django image is pushed and migrations have run."
+  type        = number
+  default     = 0
+}
+
+variable "background_worker_command" {
+  description = "Command override for the background task worker container."
+  type        = list(string)
+  default     = ["python", "manage.py", "process_tasks", "--settings=app.settings.production"]
+}
+
 variable "task_cpu" {
   description = "Fargate task CPU units."
   type        = number

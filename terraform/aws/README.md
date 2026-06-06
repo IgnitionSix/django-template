@@ -6,6 +6,7 @@ This stack creates the default AWS shape for a generated Django project:
 - Optional NAT gateway support.
 - Application Load Balancer.
 - ECS Fargate cluster, task definition, and service.
+- Optional ECS Fargate background task worker service.
 - ECR repository for the Django image.
 - RDS PostgreSQL.
 - ElastiCache Redis for Django cache and rate-limit backing.
@@ -46,6 +47,7 @@ Edit at least:
 - `aws_region`
 - `container_image` after you push an app image
 - `desired_task_count` after the image exists
+- `background_worker_desired_count` after the image exists and migrations have run, if you use background tasks
 
 First initialize with the bootstrapped backend:
 
@@ -89,7 +91,7 @@ Set `container_image` to the pushed tag, keep `desired_task_count = 0`, then app
 terraform apply
 ```
 
-Run migrations as a one-off ECS task using the task definition and cluster output. Do not run migrations as the steady-state ECS service command, because multiple tasks can start at once during deploys.
+Run migrations as a one-off ECS task using the task definition and cluster output. Do not run migrations as the steady-state ECS service or background worker command, because multiple tasks can start at once during deploys.
 
 ```bash
 aws ecs run-task \
@@ -100,7 +102,7 @@ aws ecs run-task \
   --overrides '{"containerOverrides":[{"name":"app","command":["python","manage.py","migrate","--settings=app.settings.production"]}]}'
 ```
 
-After migrations finish, set `desired_task_count = 1` and apply again to start the service:
+After migrations finish, set `desired_task_count = 1`. If you use `django-background-tasks`, also set `background_worker_desired_count = 1` to start the worker service that runs `python manage.py process_tasks`.
 
 ```bash
 terraform apply
@@ -119,6 +121,7 @@ Without `certificate_arn`, Terraform uses HTTP and tells Django not to force SSL
 The defaults are intentionally small and bootstrap-friendly:
 
 - `desired_task_count = 0` until the app image is pushed.
+- `background_worker_desired_count = 0` until the app image is pushed and migrations have run.
 - `db.t4g.micro` for RDS.
 - `cache.t4g.micro` for Redis.
 - NAT gateway disabled by default to avoid surprise cost.

@@ -8,6 +8,10 @@ environment  = "dev"
 desired_task_count = 0
 container_image    = "REPLACE_WITH_ECR_REPOSITORY_URL:latest"
 
+# Keep the background task worker at 0 until the image exists and migrations have
+# run. Set to 1 or more when the app uses django-background-tasks.
+background_worker_desired_count = 0
+
 # Optional domain support. Leave certificate_arn null to use the ALB HTTP URL
 # during the first bootstrap.
 certificate_arn = null

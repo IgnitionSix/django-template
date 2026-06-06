@@ -24,6 +24,7 @@ INSTALLED_APPS = [
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
+    "background_task",
     "csp",
     "django_browser_reload",
     "simple_history",

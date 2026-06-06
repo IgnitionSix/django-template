@@ -2,7 +2,7 @@
 
 An opinionated Ignition 6 starter for server-rendered Django applications.
 
-It includes Django 5.2, Tailwind, htmx, Alpine, Chart.js, django-allauth, django-csp, django-ratelimit, django-simple-history, Docker Compose for local development, and AWS Terraform for the common production shape.
+It includes Django 5.2, Tailwind, htmx, Alpine, Chart.js, django-allauth, django-background-tasks, django-csp, django-ratelimit, django-simple-history, Docker Compose for local development, and AWS Terraform for the common production shape.
 
 The template starts with one local Django app, `core`. Add domain apps as the project grows, but do not start by splitting behavior across artificial `api`, `home`, and `theme` apps.
 
@@ -14,10 +14,11 @@ The template starts with one local Django app, `core`. Add domain apps as the pr
 - Tailwind source and npm lockfile in `appimage/baseapp/core/static_src`.
 - Bundled local htmx, Alpine CSP build, Chart.js, and app JavaScript in `appimage/baseapp/core/static`.
 - allauth account URLs and starter templates under `/accounts/`.
+- Database-backed background tasks with a local worker service.
 - CSP middleware and restrictive default policy.
 - Rate-limited htmx example endpoint.
 - `HistoryModel`, a UUID/timestamp/simple-history abstract base model.
-- Docker Compose services for Django, Tailwind, PostgreSQL, and Redis.
+- Docker Compose services for Django, background tasks, Tailwind, PostgreSQL, and Redis.
 - GitHub Actions for Ruff, asset build, Django tests, and deploy checks.
 - Terraform under `terraform/aws` for VPC, ALB, ECS, RDS, Redis, IAM, logs, and secrets.
 
@@ -47,6 +48,7 @@ docker compose up --build
 ```
 
 Open [http://localhost:8000/](http://localhost:8000/). The app container waits for PostgreSQL, runs migrations, and starts Django. The Tailwind service watches and rebuilds CSS.
+The worker container runs migrations and then starts `python manage.py process_tasks` for `django-background-tasks`.
 
 For a shell-only run:
 
@@ -133,6 +135,27 @@ class Customer(HistoryModel):
 
 Set `_sticky_fields = ("field_name",)` on a subclass to make fields immutable after creation.
 
+## Background Tasks
+
+Use `django-background-tasks` for simple database-backed work that should run outside the request/response cycle.
+
+```python
+from background_task import background
+
+
+@background()
+def send_welcome_email(user_id):
+    ...
+```
+
+Schedule a task by calling it like a normal function:
+
+```python
+send_welcome_email(user.id)
+```
+
+The template includes `core.tasks.example_background_task` as a minimal example. Locally, `docker compose up --build` starts a `worker` service that runs `python manage.py process_tasks`. In production, the Terraform stack includes a separate ECS worker service; keep `background_worker_desired_count = 0` until the app image exists and migrations have run, then scale it to `1` or more.
+
 ## Security Defaults
 
 Production settings require explicit environment variables for secrets, hosts, CSRF origins, and database connection details. They also enable secure cookies, HSTS, proxy SSL headers, CSP, clickjacking protection, and secure content-type sniffing defaults.
@@ -217,7 +240,7 @@ aws ecs run-task \
   --overrides '{"containerOverrides":[{"name":"app","command":["python","manage.py","migrate","--settings=app.settings.production"]}]}'
 ```
 
-After migrations finish, set `desired_task_count = 1`, apply again, and open the ALB URL:
+After migrations finish, set `desired_task_count = 1`. If you use background tasks, also set `background_worker_desired_count = 1`. Apply again, and open the ALB URL:
 
 ```bash
 terraform apply

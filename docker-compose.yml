@@ -43,6 +43,33 @@ services:
     networks:
       - backend
 
+  worker:
+    build: ./appimage
+    command: >
+      /bin/sh -c "until pg_isready -h \"$${POSTGRES_HOST:-db}\" -U \"$${POSTGRES_USER:-postgres}\" -d \"$${POSTGRES_DB:-defaultapp}\"; do
+        echo 'Waiting for postgres...';
+        sleep 2;
+      done;
+      python manage.py migrate --settings=app.settings.local;
+      python manage.py process_tasks --settings=app.settings.local"
+    environment:
+      DJANGO_SETTINGS_MODULE: app.settings.local
+      POSTGRES_DB: defaultapp
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_HOST: db
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: local
+    volumes:
+      - ./appimage/baseapp:/code/baseapp
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - backend
+
   tailwind:
     build: ./appimage
     command: /bin/sh /code/baseapp/run_tailwind.sh
