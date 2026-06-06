@@ -2,11 +2,10 @@ aws_region   = "us-east-1"
 project_name = "my-django-app"
 environment  = "dev"
 
-# Keep desired_task_count at 0 for the first apply. After Terraform creates ECR,
-# build and push your image, set container_image to that pushed tag, then set this
-# to 1 or more.
+# Keep desired_task_count at 0 for the first apply. The tracked
+# image.auto.tfvars.json file holds container_image and is updated by the deploy
+# workflow after it pushes a new app image.
 desired_task_count = 0
-container_image    = "REPLACE_WITH_ECR_REPOSITORY_URL:latest"
 
 # Keep the background task worker at 0 until the image exists and migrations have
 # run. Set to 1 or more when the app uses django-background-tasks.

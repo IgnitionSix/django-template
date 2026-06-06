@@ -1,0 +1,139 @@
+name: deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths-ignore:
+      - "terraform/aws/image.auto.tfvars.json"
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ECR_REPOSITORY_URI: ${{ vars.ECR_REPOSITORY_URI }}
+  ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
+  ECS_WEB_SERVICE: ${{ vars.ECS_WEB_SERVICE }}
+  ECS_WEB_TASK_DEFINITION: ${{ vars.ECS_WEB_TASK_DEFINITION }}
+  ECS_WORKER_SERVICE: ${{ vars.ECS_WORKER_SERVICE }}
+  ECS_WORKER_TASK_DEFINITION: ${{ vars.ECS_WORKER_TASK_DEFINITION }}
+  IMAGE_VARS_FILE: terraform/aws/image.auto.tfvars.json
+
+jobs:
+  deploy:
+    name: Build, push, and deploy
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.1.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        id: build-image
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          image_uri="${ECR_REPOSITORY_URI}:${IMAGE_TAG}"
+          latest_uri="${ECR_REPOSITORY_URI}:latest"
+
+          docker build -t "${image_uri}" -t "${latest_uri}" ./appimage
+          docker push "${image_uri}"
+          docker push "${latest_uri}"
+
+          echo "image=${image_uri}" >> "${GITHUB_OUTPUT}"
+
+      - name: Record image URI for Terraform
+        env:
+          IMAGE_URI: ${{ steps.build-image.outputs.image }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ["IMAGE_VARS_FILE"])
+          path.parent.mkdir(parents=True, exist_ok=True)
+          path.write_text(
+              json.dumps({"container_image": os.environ["IMAGE_URI"]}, indent=2)
+              + "\n"
+          )
+          PY
+
+      - name: Download web task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition "${ECS_WEB_TASK_DEFINITION}" \
+            --query taskDefinition \
+            > /tmp/web-task-definition.json
+
+      - name: Render web task definition
+        id: render-web
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: /tmp/web-task-definition.json
+          container-name: app
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy web service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-web.outputs.task-definition }}
+          service: ${{ env.ECS_WEB_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          wait-for-minutes: 10
+
+      - name: Download background worker task definition
+        if: env.ECS_WORKER_SERVICE != '' && env.ECS_WORKER_TASK_DEFINITION != ''
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition "${ECS_WORKER_TASK_DEFINITION}" \
+            --query taskDefinition \
+            > /tmp/worker-task-definition.json
+
+      - name: Render background worker task definition
+        if: env.ECS_WORKER_SERVICE != '' && env.ECS_WORKER_TASK_DEFINITION != ''
+        id: render-worker
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: /tmp/worker-task-definition.json
+          container-name: background-worker
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy background worker service
+        if: env.ECS_WORKER_SERVICE != '' && env.ECS_WORKER_TASK_DEFINITION != ''
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-worker.outputs.task-definition }}
+          service: ${{ env.ECS_WORKER_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          wait-for-minutes: 10
+
+      - name: Commit Terraform image URI
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${IMAGE_VARS_FILE}"
+          if git diff --cached --quiet; then
+            echo "Terraform image URI is already current."
+          else
+            git commit -m "chore: update deployed image [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi

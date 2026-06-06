@@ -19,7 +19,7 @@ The template starts with one local Django app, `core`. Add domain apps as the pr
 - Rate-limited htmx example endpoint.
 - `HistoryModel`, a UUID/timestamp/simple-history abstract base model.
 - Docker Compose services for Django, background tasks, Tailwind, PostgreSQL, and Redis.
-- GitHub Actions for Ruff, asset build, Django tests, and deploy checks.
+- GitHub Actions for Ruff, asset build, Django tests, deploy checks, and ECR/ECS deployment.
 - Terraform under `terraform/aws` for VPC, ALB, ECS, RDS, Redis, IAM, logs, and secrets.
 
 ## Prerequisites
@@ -75,6 +75,13 @@ Run lint and format checks:
 cd appimage/baseapp
 ./.venv/bin/ruff check .
 ./.venv/bin/ruff format --check .
+```
+
+Run the GitHub Actions workflow linter:
+
+```bash
+go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+"$(go env GOPATH)/bin/actionlint"
 ```
 
 Run the production deploy check with a sample environment:
@@ -197,7 +204,7 @@ Create your app variables:
 cp terraform.tfvars.example terraform.tfvars
 ```
 
-Edit `project_name`, `environment`, and `aws_region`. Keep `desired_task_count = 0` for the first apply so Terraform can create ECR and the infrastructure before an app image exists.
+Edit `project_name`, `environment`, and `aws_region`. Keep `desired_task_count = 0` for the first apply so Terraform can create ECR and the infrastructure before an app image exists. The tracked `image.auto.tfvars.json` file owns `container_image`; it starts with a safe placeholder and is updated by the deploy workflow after a successful image rollout.
 
 ```bash
 terraform init -backend-config=backend.hcl
@@ -206,24 +213,20 @@ terraform apply
 terraform output ecr_repository_url
 ```
 
-Build and push the app image:
+Configure the GitHub deployment workflow with repository or environment variables:
 
-```bash
-cd ../../
-docker build -t my-django-app ./appimage
-aws ecr get-login-password --region us-east-1 \
-  | docker login --username AWS --password-stdin ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
-docker tag my-django-app:latest ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/my-django-app-dev-app:latest
-docker push ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/my-django-app-dev-app:latest
-```
+- `AWS_REGION`
+- `AWS_ROLE_TO_ASSUME`
+- `ECR_REPOSITORY_URI` from `terraform output -raw ecr_repository_url`
+- `ECS_CLUSTER` from `terraform output -raw ecs_cluster_name`
+- `ECS_WEB_SERVICE` from `terraform output -raw ecs_service_name`
+- `ECS_WEB_TASK_DEFINITION` from `terraform output -raw ecs_task_definition_family`
+- `ECS_WORKER_SERVICE` from `terraform output -raw ecs_background_worker_service_name`, if you run the worker
+- `ECS_WORKER_TASK_DEFINITION` from `terraform output -raw ecs_background_worker_task_definition_family`, if you run the worker
 
-Return to the Terraform stack directory:
+Run the `deploy` GitHub Action manually or push to `main`. The workflow builds `./appimage`, pushes a commit-tagged image to ECR, deploys the web service and optional worker service, then commits the deployed image URI to `terraform/aws/image.auto.tfvars.json`.
 
-```bash
-cd terraform/aws
-```
-
-Set `container_image` to the pushed ECR tag, keep `desired_task_count = 0`, then apply again. This updates the ECS task definition without starting the web service yet:
+Pull that image URI commit, keep `desired_task_count = 0`, then apply again. This updates the ECS task definition without starting the web service yet:
 
 ```bash
 terraform apply

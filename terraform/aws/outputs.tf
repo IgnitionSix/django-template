@@ -33,6 +33,11 @@ output "ecs_task_definition_family" {
   value       = aws_ecs_task_definition.app.family
 }
 
+output "ecs_background_worker_task_definition_family" {
+  description = "ECS task definition family for the background task worker."
+  value       = aws_ecs_task_definition.background_worker.family
+}
+
 output "ecs_security_group_id" {
   description = "Security group ID attached to ECS tasks."
   value       = aws_security_group.ecs.id

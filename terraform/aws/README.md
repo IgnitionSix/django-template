@@ -45,9 +45,10 @@ Edit at least:
 - `project_name`
 - `environment`
 - `aws_region`
-- `container_image` after you push an app image
 - `desired_task_count` after the image exists
 - `background_worker_desired_count` after the image exists and migrations have run, if you use background tasks
+
+The tracked `image.auto.tfvars.json` file owns `container_image`. It starts with a safe placeholder and is updated by the GitHub deploy workflow after successful image rollouts.
 
 First initialize with the bootstrapped backend:
 
@@ -65,27 +66,29 @@ terraform apply
 terraform output ecr_repository_url
 ```
 
-## 4. Build And Push The Django Image
+## 4. Configure GitHub Deploys
 
-Return to the repo root, then use the generated ECR repository URL:
-
-```bash
-cd ../..
-aws ecr get-login-password --region us-east-1 \
-  | docker login --username AWS --password-stdin ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
-
-docker build -t my-django-app ./appimage
-docker tag my-django-app:latest ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/my-django-app-dev-app:latest
-docker push ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/my-django-app-dev-app:latest
-```
-
-Return to the Terraform stack directory:
+Create a GitHub environment named `production`, or repository variables if you do not use environments. Set these variables from Terraform outputs:
 
 ```bash
-cd terraform/aws
+AWS_REGION=us-east-1
+AWS_ROLE_TO_ASSUME=arn:aws:iam::ACCOUNT_ID:role/YOUR_GITHUB_ACTIONS_ROLE
+ECR_REPOSITORY_URI=$(terraform output -raw ecr_repository_url)
+ECS_CLUSTER=$(terraform output -raw ecs_cluster_name)
+ECS_WEB_SERVICE=$(terraform output -raw ecs_service_name)
+ECS_WEB_TASK_DEFINITION=$(terraform output -raw ecs_task_definition_family)
 ```
 
-Set `container_image` to the pushed tag, keep `desired_task_count = 0`, then apply again. This registers the app task definition without starting the service yet.
+If you run the background task worker, also set:
+
+```bash
+ECS_WORKER_SERVICE=$(terraform output -raw ecs_background_worker_service_name)
+ECS_WORKER_TASK_DEFINITION=$(terraform output -raw ecs_background_worker_task_definition_family)
+```
+
+Run the `deploy` GitHub Action manually or push to `main`. It builds `./appimage`, pushes `${GITHUB_SHA}` and `latest` tags to ECR, updates the ECS web task definition, optionally updates the background worker task definition, waits for service stability, and commits the deployed image URI to `terraform/aws/image.auto.tfvars.json`.
+
+Pull that commit locally, keep `desired_task_count = 0`, then apply again. This registers the app task definition with the deployed image without starting the service yet.
 
 ```bash
 terraform apply
