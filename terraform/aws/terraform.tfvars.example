@@ -2,6 +2,12 @@ aws_region   = "us-east-1"
 project_name = "my-django-app"
 environment  = "dev"
 
+# For fuller starting points, copy one of:
+# - terraform/aws/environments/dev.tfvars.example
+# - terraform/aws/environments/prod.tfvars.example
+#
+# to terraform/aws/terraform.tfvars and edit project/domain/account values.
+
 # Keep desired_task_count at 0 for the first apply. The tracked
 # image.auto.tfvars.json file holds container_image and is updated by the deploy
 # workflow after it pushes a new app image.

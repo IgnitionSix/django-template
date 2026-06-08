@@ -29,10 +29,13 @@ data "aws_iam_policy_document" "ecs_task_execution_secrets" {
       "secretsmanager:GetSecretValue",
     ]
 
-    resources = [
-      aws_secretsmanager_secret.django_secret_key.arn,
-      aws_secretsmanager_secret.database.arn,
-    ]
+    resources = distinct(concat(
+      [
+        aws_secretsmanager_secret.django_secret_key.arn,
+        aws_secretsmanager_secret.database.arn,
+      ],
+      var.app_secret_access_arns,
+    ))
   }
 }
 
@@ -46,4 +49,3 @@ resource "aws_iam_role" "ecs_task" {
   name               = "${local.name_prefix}-ecs-task"
   assume_role_policy = data.aws_iam_policy_document.ecs_task_assume_role.json
 }
-
