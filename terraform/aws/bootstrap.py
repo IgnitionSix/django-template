@@ -1,0 +1,410 @@
+#!/usr/bin/env python3
+"""Interactive bootstrap helper for the AWS Terraform stack."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+
+
+@dataclass
+class BootstrapConfig:
+    profile: str
+    project_name: str
+    environment: str
+    aws_region: str
+    domain_names: list[str] = field(default_factory=list)
+    certificate_arn: str = ""
+    desired_task_count: int = 0
+    background_worker_desired_count: int = 0
+    task_cpu: int = 512
+    task_memory: int = 1024
+    enable_nat_gateway: bool = False
+    ecs_use_private_subnets: bool = False
+    ecs_assign_public_ip: bool = True
+    alb_deletion_protection: bool = False
+    rds_deletion_protection: bool = False
+    rds_skip_final_snapshot: bool = True
+    rds_instance_class: str = "db.t4g.micro"
+    redis_node_type: str = "cache.t4g.micro"
+    log_retention_days: int = 30
+    app_environment: dict[str, str] = field(default_factory=dict)
+    app_secrets: dict[str, str] = field(default_factory=dict)
+    app_secret_access_arns: list[str] = field(default_factory=list)
+    backend_bucket: str = ""
+    backend_key: str = ""
+    backend_region: str = ""
+    backend_dynamodb_table: str = ""
+    github_environment: str = "production"
+    github_role_to_assume: str = ""
+
+
+@dataclass
+class BootstrapPaths:
+    tfvars_path: Path
+    backend_path: Path | None
+    github_vars_path: Path
+    next_steps_path: Path
+
+
+def hcl_string(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def hcl_bool(value: bool) -> str:
+    return "true" if value else "false"
+
+
+def hcl_string_list(values: list[str]) -> str:
+    return "[" + ", ".join(hcl_string(value) for value in values) + "]"
+
+
+def hcl_string_map(values: dict[str, str]) -> str:
+    if not values:
+        return "{}"
+
+    lines = ["{"]
+    for key, value in values.items():
+        lines.append(f"  {key} = {hcl_string(value)}")
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def render_tfvars(config: BootstrapConfig) -> str:
+    lines = [
+        f"aws_region   = {hcl_string(config.aws_region)}",
+        f"project_name = {hcl_string(config.project_name)}",
+        f"environment  = {hcl_string(config.environment)}",
+        "",
+        "# Keep task counts at 0 until the first image is pushed and migrations have run.",
+        f"desired_task_count              = {config.desired_task_count}",
+        f"background_worker_desired_count = {config.background_worker_desired_count}",
+        "",
+        f"certificate_arn = {hcl_string(config.certificate_arn) if config.certificate_arn else 'null'}",
+        f"domain_names    = {hcl_string_list(config.domain_names)}",
+        "",
+        f"enable_nat_gateway      = {hcl_bool(config.enable_nat_gateway)}",
+        f"ecs_use_private_subnets = {hcl_bool(config.ecs_use_private_subnets)}",
+        f"ecs_assign_public_ip    = {hcl_bool(config.ecs_assign_public_ip)}",
+        "",
+        f"alb_deletion_protection = {hcl_bool(config.alb_deletion_protection)}",
+        f"rds_deletion_protection = {hcl_bool(config.rds_deletion_protection)}",
+        f"rds_skip_final_snapshot = {hcl_bool(config.rds_skip_final_snapshot)}",
+        "",
+        f"task_cpu    = {config.task_cpu}",
+        f"task_memory = {config.task_memory}",
+        "",
+        f"rds_instance_class = {hcl_string(config.rds_instance_class)}",
+        f"redis_node_type    = {hcl_string(config.redis_node_type)}",
+        f"log_retention_days = {config.log_retention_days}",
+        "",
+        "app_environment = " + hcl_string_map(config.app_environment),
+        "",
+        "app_secrets = " + hcl_string_map(config.app_secrets),
+    ]
+
+    if config.app_secret_access_arns:
+        lines.extend(
+            [
+                "",
+                "app_secret_access_arns = [",
+                *[f"  {hcl_string(arn)}," for arn in config.app_secret_access_arns],
+                "]",
+            ]
+        )
+
+    return "\n".join(lines) + "\n"
+
+
+def render_backend_hcl(config: BootstrapConfig) -> str | None:
+    if not all(
+        [
+            config.backend_bucket,
+            config.backend_key,
+            config.backend_region,
+            config.backend_dynamodb_table,
+        ]
+    ):
+        return None
+
+    return "\n".join(
+        [
+            f"bucket         = {hcl_string(config.backend_bucket)}",
+            f"key            = {hcl_string(config.backend_key)}",
+            f"region         = {hcl_string(config.backend_region)}",
+            f"dynamodb_table = {hcl_string(config.backend_dynamodb_table)}",
+            "encrypt        = true",
+            "",
+        ]
+    )
+
+
+def render_github_vars(config: BootstrapConfig) -> str:
+    role_value = (
+        config.github_role_to_assume
+        or "arn:aws:iam::ACCOUNT_ID:role/YOUR_GITHUB_ACTIONS_ROLE"
+    )
+    lines = [
+        "# Generated by terraform/aws/bootstrap.py",
+        f"# GitHub environment: {config.github_environment}",
+        f"AWS_REGION={config.aws_region}",
+        f"AWS_ROLE_TO_ASSUME={role_value}",
+        "ECR_REPOSITORY_URI=$(terraform output -raw ecr_repository_url)",
+        "ECS_CLUSTER=$(terraform output -raw ecs_cluster_name)",
+        "ECS_WEB_SERVICE=$(terraform output -raw ecs_service_name)",
+        "ECS_WEB_TASK_DEFINITION=$(terraform output -raw ecs_task_definition_family)",
+        "ECS_WORKER_SERVICE=$(terraform output -raw ecs_background_worker_service_name)",
+        "ECS_WORKER_TASK_DEFINITION=$(terraform output -raw ecs_background_worker_task_definition_family)",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def render_next_steps(config: BootstrapConfig) -> str:
+    backend_flag = (
+        "-backend-config=backend.hcl"
+        if render_backend_hcl(config)
+        else "-backend=false"
+    )
+    return f"""# Bootstrap Next Steps
+
+GitHub environment: {config.github_environment}
+
+1. Review the generated Terraform values:
+
+   terraform/aws/terraform.tfvars
+
+2. Initialize and apply the Terraform stack:
+
+   cd terraform/aws
+   terraform init {backend_flag}
+   terraform plan
+   terraform apply
+
+3. Set these GitHub environment variables after Terraform has outputs:
+
+   AWS_REGION={config.aws_region}
+   AWS_ROLE_TO_ASSUME={config.github_role_to_assume or "arn:aws:iam::ACCOUNT_ID:role/YOUR_GITHUB_ACTIONS_ROLE"}
+   ECR_REPOSITORY_URI=$(terraform output -raw ecr_repository_url)
+   ECS_CLUSTER=$(terraform output -raw ecs_cluster_name)
+   ECS_WEB_SERVICE=$(terraform output -raw ecs_service_name)
+   ECS_WEB_TASK_DEFINITION=$(terraform output -raw ecs_task_definition_family)
+   ECS_WORKER_SERVICE=$(terraform output -raw ecs_background_worker_service_name)
+   ECS_WORKER_TASK_DEFINITION=$(terraform output -raw ecs_background_worker_task_definition_family)
+
+4. Keep desired_task_count at 0 until the deploy workflow has pushed an image.
+   Then run migrations as a one-off ECS task before scaling the service.
+"""
+
+
+def write_bootstrap_files(
+    config: BootstrapConfig, terraform_dir: Path
+) -> BootstrapPaths:
+    terraform_dir.mkdir(parents=True, exist_ok=True)
+    local_dir = terraform_dir / "bootstrap.local"
+    local_dir.mkdir(parents=True, exist_ok=True)
+
+    tfvars_path = terraform_dir / "terraform.tfvars"
+    tfvars_path.write_text(render_tfvars(config))
+
+    backend_path = None
+    backend_hcl = render_backend_hcl(config)
+    if backend_hcl is not None:
+        backend_path = terraform_dir / "backend.hcl"
+        backend_path.write_text(backend_hcl)
+
+    github_vars_path = local_dir / f"{config.environment}-github-vars.env"
+    github_vars_path.write_text(render_github_vars(config))
+
+    next_steps_path = local_dir / f"{config.environment}-next-steps.md"
+    next_steps_path.write_text(render_next_steps(config))
+
+    return BootstrapPaths(
+        tfvars_path=tfvars_path,
+        backend_path=backend_path,
+        github_vars_path=github_vars_path,
+        next_steps_path=next_steps_path,
+    )
+
+
+def ask(prompt: str, default: str = "") -> str:
+    suffix = f" [{default}]" if default else ""
+    value = input(f"{prompt}{suffix}: ").strip()
+    return value or default
+
+
+def ask_bool(prompt: str, default: bool) -> bool:
+    default_text = "Y/n" if default else "y/N"
+    while True:
+        value = input(f"{prompt} [{default_text}]: ").strip().lower()
+        if not value:
+            return default
+        if value in {"y", "yes"}:
+            return True
+        if value in {"n", "no"}:
+            return False
+        print("Please answer yes or no.")
+
+
+def ask_int(prompt: str, default: int) -> int:
+    while True:
+        value = ask(prompt, str(default))
+        try:
+            return int(value)
+        except ValueError:
+            print("Please enter a whole number.")
+
+
+def ask_csv(prompt: str, default: list[str] | None = None) -> list[str]:
+    default = default or []
+    raw = ask(prompt, ", ".join(default))
+    return [part.strip() for part in raw.split(",") if part.strip()]
+
+
+def ask_map(prompt: str) -> dict[str, str]:
+    print(prompt)
+    print("Enter KEY=value pairs. Leave KEY blank when finished.")
+    values: dict[str, str] = {}
+    while True:
+        key = ask("Key")
+        if not key:
+            return values
+        value = ask(f"Value for {key}")
+        values[key] = value
+
+
+def defaults_for_profile(profile: str) -> dict[str, object]:
+    if profile == "prod":
+        return {
+            "task_cpu": 2048,
+            "task_memory": 5120,
+            "enable_nat_gateway": True,
+            "ecs_use_private_subnets": True,
+            "ecs_assign_public_ip": False,
+            "alb_deletion_protection": True,
+            "rds_deletion_protection": True,
+            "rds_skip_final_snapshot": False,
+            "rds_instance_class": "db.t4g.small",
+            "redis_node_type": "cache.t4g.small",
+            "log_retention_days": 90,
+            "github_environment": "production",
+        }
+
+    return {
+        "task_cpu": 512,
+        "task_memory": 1024,
+        "enable_nat_gateway": False,
+        "ecs_use_private_subnets": False,
+        "ecs_assign_public_ip": True,
+        "alb_deletion_protection": False,
+        "rds_deletion_protection": False,
+        "rds_skip_final_snapshot": True,
+        "rds_instance_class": "db.t4g.micro",
+        "redis_node_type": "cache.t4g.micro",
+        "log_retention_days": 14,
+        "github_environment": "production",
+    }
+
+
+def collect_config() -> BootstrapConfig:
+    profile = ask("Environment preset (dev/prod)", "dev").lower()
+    if profile not in {"dev", "prod"}:
+        print("Unknown preset, using dev defaults.")
+        profile = "dev"
+
+    defaults = defaults_for_profile(profile)
+    project_name = ask("Project name", "my-django-app")
+    environment = ask("Terraform environment name", profile)
+    aws_region = ask("AWS region", "us-east-1")
+    domain_names = ask_csv("Domain names, comma-separated")
+    certificate_arn = ask("ACM certificate ARN for HTTPS")
+
+    config = BootstrapConfig(
+        profile=profile,
+        project_name=project_name,
+        environment=environment,
+        aws_region=aws_region,
+        domain_names=domain_names,
+        certificate_arn=certificate_arn,
+        desired_task_count=0,
+        background_worker_desired_count=0,
+        task_cpu=ask_int("Task CPU units", int(defaults["task_cpu"])),
+        task_memory=ask_int("Task memory MiB", int(defaults["task_memory"])),
+        enable_nat_gateway=ask_bool(
+            "Enable NAT gateway", bool(defaults["enable_nat_gateway"])
+        ),
+        ecs_use_private_subnets=ask_bool(
+            "Run ECS tasks in private subnets",
+            bool(defaults["ecs_use_private_subnets"]),
+        ),
+        ecs_assign_public_ip=ask_bool(
+            "Assign public IPs to ECS tasks",
+            bool(defaults["ecs_assign_public_ip"]),
+        ),
+        alb_deletion_protection=ask_bool(
+            "Enable ALB deletion protection",
+            bool(defaults["alb_deletion_protection"]),
+        ),
+        rds_deletion_protection=ask_bool(
+            "Enable RDS deletion protection",
+            bool(defaults["rds_deletion_protection"]),
+        ),
+        rds_skip_final_snapshot=ask_bool(
+            "Skip final RDS snapshot on destroy",
+            bool(defaults["rds_skip_final_snapshot"]),
+        ),
+        rds_instance_class=ask(
+            "RDS instance class", str(defaults["rds_instance_class"])
+        ),
+        redis_node_type=ask("Redis node type", str(defaults["redis_node_type"])),
+        log_retention_days=ask_int(
+            "CloudWatch log retention days", int(defaults["log_retention_days"])
+        ),
+    )
+
+    if ask_bool("Add extra non-secret app environment variables", False):
+        config.app_environment = ask_map("App environment variables")
+
+    if ask_bool("Add extra Secrets Manager values for ECS", False):
+        config.app_secrets = ask_map("App secret mappings")
+        config.app_secret_access_arns = ask_csv(
+            "Secret access ARNs for the ECS execution role, comma-separated"
+        )
+
+    if ask_bool("Write backend.hcl from existing backend bootstrap outputs", False):
+        config.backend_bucket = ask("Terraform state bucket")
+        config.backend_key = ask(
+            "Terraform state key", f"{environment}/terraform.tfstate"
+        )
+        config.backend_region = ask("Terraform backend region", aws_region)
+        config.backend_dynamodb_table = ask("Terraform lock table")
+
+    config.github_environment = ask(
+        "GitHub environment name used by deploy.yml",
+        str(defaults["github_environment"]),
+    )
+    config.github_role_to_assume = ask("GitHub Actions AWS role ARN")
+
+    return config
+
+
+def main() -> int:
+    terraform_dir = Path(__file__).resolve().parent
+    print("Django template AWS bootstrap")
+    print("This writes ignored local Terraform/deploy helper files.")
+    config = collect_config()
+    paths = write_bootstrap_files(config, terraform_dir)
+
+    print("\nWrote:")
+    print(f"- {paths.tfvars_path}")
+    if paths.backend_path:
+        print(f"- {paths.backend_path}")
+    print(f"- {paths.github_vars_path}")
+    print(f"- {paths.next_steps_path}")
+    print("\nReview the files, then follow the next-steps checklist.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

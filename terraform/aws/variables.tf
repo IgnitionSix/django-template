@@ -116,14 +116,50 @@ variable "container_image" {
   default     = "public.ecr.aws/docker/library/python:3.13-slim"
 }
 
+variable "container_name" {
+  description = "Name of the web container inside the ECS task definition. Keep this as app unless your deploy workflow also changes its render target."
+  type        = string
+  default     = "app"
+}
+
 variable "container_port" {
   description = "Port the Django container listens on."
   type        = number
   default     = 8000
 }
 
+variable "container_port_mapping_name" {
+  description = "Optional ECS Service Connect-style port mapping name. Defaults to project-environment-port-tcp."
+  type        = string
+  default     = null
+}
+
+variable "container_app_protocol" {
+  description = "Application protocol metadata for the web container port mapping."
+  type        = string
+  default     = "http"
+}
+
 variable "container_command" {
   description = "Optional command override for the Django container."
+  type        = list(string)
+  default     = []
+}
+
+variable "app_environment" {
+  description = "Additional non-secret environment variables injected into both the web and background worker containers."
+  type        = map(string)
+  default     = {}
+}
+
+variable "app_secrets" {
+  description = "Additional ECS secret mappings injected into both containers. Values are Secrets Manager valueFrom strings."
+  type        = map(string)
+  default     = {}
+}
+
+variable "app_secret_access_arns" {
+  description = "Secret ARNs the ECS execution role may read for app_secrets. Use the base secret ARN when app_secrets values include JSON key selectors."
   type        = list(string)
   default     = []
 }
@@ -156,6 +192,18 @@ variable "task_memory" {
   description = "Fargate task memory in MiB."
   type        = number
   default     = 1024
+}
+
+variable "task_cpu_architecture" {
+  description = "CPU architecture for ECS Fargate task definitions."
+  type        = string
+  default     = "X86_64"
+}
+
+variable "task_operating_system_family" {
+  description = "Operating system family for ECS Fargate task definitions."
+  type        = string
+  default     = "LINUX"
 }
 
 variable "health_check_path" {

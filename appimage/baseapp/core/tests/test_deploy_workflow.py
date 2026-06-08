@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 from django.test import SimpleTestCase
@@ -39,3 +40,33 @@ class DeployWorkflowTests(SimpleTestCase):
             image_vars,
             {"container_image": "public.ecr.aws/docker/library/python:3.13-slim"},
         )
+
+    def test_terraform_ecs_task_definition_has_prod_ready_metadata(self):
+        terraform_path = REPO_ROOT / "terraform" / "aws" / "ecs.tf"
+        locals_path = REPO_ROOT / "terraform" / "aws" / "main.tf"
+
+        contents = terraform_path.read_text()
+        locals_contents = locals_path.read_text()
+
+        self.assertIn("runtime_platform", contents)
+        self.assertIn("var.task_cpu_architecture", contents)
+        self.assertIn("var.task_operating_system_family", contents)
+        self.assertIn("name          = local.container_port_mapping_name", contents)
+        self.assertIn("appProtocol   = var.container_app_protocol", contents)
+        self.assertIn("for name, value in var.app_environment", locals_contents)
+        self.assertIn("for name, value_from in var.app_secrets", locals_contents)
+
+    def test_terraform_includes_dev_and_prod_environment_examples(self):
+        examples_dir = REPO_ROOT / "terraform" / "aws" / "environments"
+
+        dev_example = (examples_dir / "dev.tfvars.example").read_text()
+        prod_example = (examples_dir / "prod.tfvars.example").read_text()
+
+        self.assertRegex(dev_example, r'environment\s+= "dev"')
+        self.assertIn("task_cpu    = 512", dev_example)
+        self.assertIn("task_memory = 1024", dev_example)
+        self.assertRegex(prod_example, r'environment\s+= "prod"')
+        self.assertIn("task_cpu    = 2048", prod_example)
+        self.assertIn("task_memory = 5120", prod_example)
+        self.assertIn("ecs_use_private_subnets = true", prod_example)
+        self.assertTrue(re.search(r"app_secrets\s+= \{", prod_example))

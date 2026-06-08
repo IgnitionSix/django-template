@@ -18,6 +18,10 @@ locals {
   ))
 
   ecs_subnet_ids = var.ecs_use_private_subnets ? aws_subnet.private[*].id : aws_subnet.public[*].id
+  container_port_mapping_name = coalesce(
+    var.container_port_mapping_name,
+    "${local.name_prefix}-${var.container_port}-tcp",
+  )
 
   common_environment = [
     {
@@ -65,5 +69,35 @@ locals {
       value = tostring(local.https_enabled ? var.secure_hsts_seconds : 0)
     },
   ]
-}
 
+  task_environment = concat(
+    local.common_environment,
+    [
+      for name, value in var.app_environment : {
+        name  = name
+        value = value
+      }
+    ],
+  )
+
+  managed_task_secrets = [
+    {
+      name      = "DJANGO_SECRET_KEY"
+      valueFrom = aws_secretsmanager_secret.django_secret_key.arn
+    },
+    {
+      name      = "POSTGRES_PASSWORD"
+      valueFrom = "${aws_secretsmanager_secret.database.arn}:password::"
+    },
+  ]
+
+  task_secrets = concat(
+    local.managed_task_secrets,
+    [
+      for name, value_from in var.app_secrets : {
+        name      = name
+        valueFrom = value_from
+      }
+    ],
+  )
+}

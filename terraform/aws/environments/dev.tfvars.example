@@ -1,0 +1,31 @@
+aws_region   = "us-east-1"
+project_name = "my-django-app"
+environment  = "dev"
+
+# Keep task counts at 0 for the first apply. The deploy workflow records the
+# pushed app image in terraform/aws/image.auto.tfvars.json.
+desired_task_count              = 0
+background_worker_desired_count = 0
+
+# Dev starts with the ALB HTTP URL for quick bootstrap checks.
+certificate_arn = null
+domain_names    = []
+
+# Low-cost dev networking: public ECS tasks that only accept traffic from the
+# ALB security group. Use private subnets for shared or long-lived environments.
+enable_nat_gateway     = false
+ecs_use_private_subnets = false
+ecs_assign_public_ip   = true
+
+allowed_ingress_cidrs = ["0.0.0.0/0"]
+
+task_cpu    = 512
+task_memory = 1024
+
+rds_instance_class = "db.t4g.micro"
+redis_node_type    = "cache.t4g.micro"
+
+log_retention_days = 14
+
+app_environment = {}
+app_secrets     = {}

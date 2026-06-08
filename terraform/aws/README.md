@@ -5,13 +5,14 @@ This stack creates the default AWS shape for a generated Django project:
 - VPC with public and private subnets across two or more availability zones.
 - Optional NAT gateway support.
 - Application Load Balancer.
-- ECS Fargate cluster, task definition, and service.
+- ECS Fargate cluster, web task definition, and web service.
 - Optional ECS Fargate background task worker service.
 - ECR repository for the Django image.
 - RDS PostgreSQL.
 - ElastiCache Redis for Django cache and rate-limit backing.
 - Secrets Manager entries for `DJANGO_SECRET_KEY` and database credentials.
 - CloudWatch logs and IAM roles.
+- Dev and prod `tfvars` examples under `terraform/aws/environments`.
 
 ## 1. Bootstrap Remote State
 
@@ -35,9 +36,35 @@ Copy `terraform/aws/backend.hcl.example` to `terraform/aws/backend.hcl` and fill
 
 ## 2. Configure The App Stack
 
+For an interactive setup, run:
+
+```bash
+cd terraform/aws
+python bootstrap.py
+```
+
+The script asks for the project, environment, region, domain, task sizing, networking posture, optional app environment variables, optional app Secrets Manager mappings, backend config, and GitHub deploy role. It writes ignored local files:
+
+- `terraform/aws/terraform.tfvars`
+- `terraform/aws/backend.hcl`, when backend values are provided
+- `terraform/aws/bootstrap.local/<environment>-github-vars.env`
+- `terraform/aws/bootstrap.local/<environment>-next-steps.md`
+
+Use the generated GitHub vars file as a checklist for the variables required by `.github/workflows/deploy.yml`.
+
+For manual setup:
+
 ```bash
 cd terraform/aws
 cp terraform.tfvars.example terraform.tfvars
+```
+
+For a fuller starting point, copy one of the environment presets instead:
+
+```bash
+cp environments/dev.tfvars.example terraform.tfvars
+# or
+cp environments/prod.tfvars.example terraform.tfvars
 ```
 
 Edit at least:
@@ -49,6 +76,18 @@ Edit at least:
 - `background_worker_desired_count` after the image exists and migrations have run, if you use background tasks
 
 The tracked `image.auto.tfvars.json` file owns `container_image`. It starts with a safe placeholder and is updated by the GitHub deploy workflow after successful image rollouts.
+
+The prod example starts with a task definition shape similar to a typical production Django app:
+
+- `task_cpu = 2048`
+- `task_memory = 5120`
+- `task_cpu_architecture = "X86_64"`
+- `task_operating_system_family = "LINUX"`
+- HTTP port metadata on the web container mapping
+- private ECS subnets behind NAT
+- deletion protection and final RDS snapshots
+
+Terraform manages `DJANGO_SECRET_KEY` and `POSTGRES_PASSWORD` by default. Add app-specific environment variables with `app_environment`, and add app-specific ECS secrets with `app_secrets`. When an `app_secrets` value uses a JSON key selector such as `arn:aws:secretsmanager:REGION:ACCOUNT:secret:my-secret:KEY::`, add the base secret ARN or wildcard ARN to `app_secret_access_arns` so the ECS execution role can read it.
 
 First initialize with the bootstrapped backend:
 

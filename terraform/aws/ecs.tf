@@ -34,32 +34,29 @@ resource "aws_ecs_task_definition" "app" {
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn
 
+  runtime_platform {
+    cpu_architecture        = var.task_cpu_architecture
+    operating_system_family = var.task_operating_system_family
+  }
+
   container_definitions = jsonencode([
     merge({
-      name      = "app"
+      name      = var.container_name
       image     = var.container_image
       essential = true
 
       portMappings = [
         {
+          name          = local.container_port_mapping_name
           containerPort = var.container_port
           hostPort      = var.container_port
           protocol      = "tcp"
+          appProtocol   = var.container_app_protocol
         }
       ]
 
-      environment = local.common_environment
-
-      secrets = [
-        {
-          name      = "DJANGO_SECRET_KEY"
-          valueFrom = aws_secretsmanager_secret.django_secret_key.arn
-        },
-        {
-          name      = "POSTGRES_PASSWORD"
-          valueFrom = "${aws_secretsmanager_secret.database.arn}:password::"
-        },
-      ]
+      environment = local.task_environment
+      secrets     = local.task_secrets
 
       logConfiguration = {
         logDriver = "awslogs"
@@ -82,6 +79,11 @@ resource "aws_ecs_task_definition" "background_worker" {
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn
 
+  runtime_platform {
+    cpu_architecture        = var.task_cpu_architecture
+    operating_system_family = var.task_operating_system_family
+  }
+
   container_definitions = jsonencode([
     {
       name      = "background-worker"
@@ -89,18 +91,8 @@ resource "aws_ecs_task_definition" "background_worker" {
       essential = true
       command   = var.background_worker_command
 
-      environment = local.common_environment
-
-      secrets = [
-        {
-          name      = "DJANGO_SECRET_KEY"
-          valueFrom = aws_secretsmanager_secret.django_secret_key.arn
-        },
-        {
-          name      = "POSTGRES_PASSWORD"
-          valueFrom = "${aws_secretsmanager_secret.database.arn}:password::"
-        },
-      ]
+      environment = local.task_environment
+      secrets     = local.task_secrets
 
       logConfiguration = {
         logDriver = "awslogs"
@@ -134,7 +126,7 @@ resource "aws_ecs_service" "app" {
 
   load_balancer {
     target_group_arn = aws_lb_target_group.app.arn
-    container_name   = "app"
+    container_name   = var.container_name
     container_port   = var.container_port
   }
 

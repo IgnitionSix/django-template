@@ -1,0 +1,47 @@
+aws_region   = "us-east-1"
+project_name = "my-django-app"
+environment  = "prod"
+
+# Keep both counts at 0 until the image is pushed and migrations have run as a
+# one-off ECS task. Scale desired_task_count first, then the worker if used.
+desired_task_count              = 0
+background_worker_desired_count = 0
+
+certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-0000-0000-000000000000"
+domain_names    = ["app.example.com"]
+
+enable_nat_gateway     = true
+ecs_use_private_subnets = true
+ecs_assign_public_ip   = false
+
+alb_deletion_protection = true
+rds_deletion_protection = true
+rds_skip_final_snapshot = false
+
+task_cpu    = 2048
+task_memory = 5120
+
+rds_instance_class         = "db.t4g.small"
+rds_allocated_storage      = 50
+rds_max_allocated_storage  = 200
+rds_backup_retention_days  = 14
+redis_node_type            = "cache.t4g.small"
+log_retention_days         = 90
+
+# Non-secret values to inject into both the web task and background worker.
+app_environment = {
+  BASIC_AUTH_USERNAME = "app"
+}
+
+# App-specific secret values to inject into both containers. Terraform already
+# manages DJANGO_SECRET_KEY and POSTGRES_PASSWORD for this template.
+app_secrets = {
+  BASIC_AUTH_PASSWORD = "arn:aws:secretsmanager:us-east-1:123456789012:secret:my-django-app-prod:basic-auth-password::"
+  EMAIL_HOST_PASSWORD = "arn:aws:secretsmanager:us-east-1:123456789012:secret:my-django-app-prod:email-host-password::"
+}
+
+# Grant the ECS execution role access to the base secret ARN used above. Use a
+# wildcard suffix when the same secret is selected by JSON keys in app_secrets.
+app_secret_access_arns = [
+  "arn:aws:secretsmanager:us-east-1:123456789012:secret:my-django-app-prod*",
+]
