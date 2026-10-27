@@ -107,7 +107,9 @@ terraform output ecr_repository_url
 
 ## 4. Configure GitHub Deploys
 
-Create a GitHub environment named `production`, or repository variables if you do not use environments. Set these variables from Terraform outputs:
+Create a GitHub environment named `production`, or repository variables if you do not use environments. The deploy workflow renders the checked-in task definition templates at `terraform/aws/task-definitions/web.json` and `terraform/aws/task-definitions/background-worker.json`; it does not download the current task definition from ECS.
+
+Set these variables from Terraform outputs:
 
 ```bash
 AWS_REGION=us-east-1
@@ -116,6 +118,9 @@ ECR_REPOSITORY_URI=$(terraform output -raw ecr_repository_url)
 ECS_CLUSTER=$(terraform output -raw ecs_cluster_name)
 ECS_WEB_SERVICE=$(terraform output -raw ecs_service_name)
 ECS_WEB_TASK_DEFINITION=$(terraform output -raw ecs_task_definition_family)
+ECS_TASK_EXECUTION_ROLE_ARN=$(terraform output -raw ecs_task_execution_role_arn)
+ECS_TASK_ROLE_ARN=$(terraform output -raw ecs_task_role_arn)
+ECS_LOG_GROUP=$(terraform output -raw ecs_log_group_name)
 ```
 
 If you run the background task worker, also set:
@@ -124,6 +129,14 @@ If you run the background task worker, also set:
 ECS_WORKER_SERVICE=$(terraform output -raw ecs_background_worker_service_name)
 ECS_WORKER_TASK_DEFINITION=$(terraform output -raw ecs_background_worker_task_definition_family)
 ```
+
+Set every key from the task-template output as a GitHub variable too:
+
+```bash
+terraform output -json task_definition_template_values
+```
+
+That output includes container port metadata, Django host/origin values, database host values, Redis URL, secret ARNs, task CPU/memory, runtime platform, and optional `APP_ENVIRONMENT_JSON` / `APP_SECRETS_JSON` values.
 
 Run the `deploy` GitHub Action manually or push to `main`. It builds `./appimage`, pushes `${GITHUB_SHA}` and `latest` tags to ECR, updates the ECS web task definition, optionally updates the background worker task definition, waits for service stability, and commits the deployed image URI to `terraform/aws/image.auto.tfvars.json`.
 

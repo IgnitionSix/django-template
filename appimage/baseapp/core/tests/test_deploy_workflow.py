@@ -27,8 +27,10 @@ class DeployWorkflowTests(SimpleTestCase):
         self.assertIn("docker build", contents)
         self.assertIn("docker push", contents)
         self.assertIn("terraform/aws/image.auto.tfvars.json", contents)
-        self.assertIn("aws-actions/amazon-ecs-render-task-definition", contents)
+        self.assertIn("terraform/aws/task-definitions/web.json", contents)
+        self.assertIn("terraform/aws/render_task_definition.py", contents)
         self.assertIn("aws-actions/amazon-ecs-deploy-task-definition@v2", contents)
+        self.assertNotIn("describe-task-definition", contents)
         self.assertIn("background-worker", contents)
 
     def test_terraform_image_file_is_auto_loaded_json(self):
