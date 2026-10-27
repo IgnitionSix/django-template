@@ -19,6 +19,28 @@ env:
   ECS_WEB_TASK_DEFINITION: ${{ vars.ECS_WEB_TASK_DEFINITION }}
   ECS_WORKER_SERVICE: ${{ vars.ECS_WORKER_SERVICE }}
   ECS_WORKER_TASK_DEFINITION: ${{ vars.ECS_WORKER_TASK_DEFINITION }}
+  ECS_TASK_EXECUTION_ROLE_ARN: ${{ vars.ECS_TASK_EXECUTION_ROLE_ARN }}
+  ECS_TASK_ROLE_ARN: ${{ vars.ECS_TASK_ROLE_ARN }}
+  ECS_LOG_GROUP: ${{ vars.ECS_LOG_GROUP }}
+  CONTAINER_PORT_MAPPING_NAME: ${{ vars.CONTAINER_PORT_MAPPING_NAME }}
+  CONTAINER_PORT: ${{ vars.CONTAINER_PORT }}
+  DJANGO_ALLOWED_HOSTS: ${{ vars.DJANGO_ALLOWED_HOSTS }}
+  DJANGO_CSRF_TRUSTED_ORIGINS: ${{ vars.DJANGO_CSRF_TRUSTED_ORIGINS }}
+  POSTGRES_DB: ${{ vars.POSTGRES_DB }}
+  POSTGRES_USER: ${{ vars.POSTGRES_USER }}
+  POSTGRES_HOST: ${{ vars.POSTGRES_HOST }}
+  POSTGRES_PORT: ${{ vars.POSTGRES_PORT }}
+  REDIS_URL: ${{ vars.REDIS_URL }}
+  SECURE_SSL_REDIRECT: ${{ vars.SECURE_SSL_REDIRECT }}
+  SECURE_HSTS_SECONDS: ${{ vars.SECURE_HSTS_SECONDS }}
+  DJANGO_SECRET_KEY_SECRET_ARN: ${{ vars.DJANGO_SECRET_KEY_SECRET_ARN }}
+  DATABASE_SECRET_ARN: ${{ vars.DATABASE_SECRET_ARN }}
+  TASK_CPU: ${{ vars.TASK_CPU }}
+  TASK_MEMORY: ${{ vars.TASK_MEMORY }}
+  TASK_CPU_ARCHITECTURE: ${{ vars.TASK_CPU_ARCHITECTURE }}
+  TASK_OPERATING_SYSTEM_FAMILY: ${{ vars.TASK_OPERATING_SYSTEM_FAMILY }}
+  APP_ENVIRONMENT_JSON: ${{ vars.APP_ENVIRONMENT_JSON }}
+  APP_SECRETS_JSON: ${{ vars.APP_SECRETS_JSON }}
   IMAGE_VARS_FILE: terraform/aws/image.auto.tfvars.json
 
 jobs:
@@ -74,52 +96,39 @@ jobs:
           )
           PY
 
-      - name: Download web task definition
-        run: |
-          aws ecs describe-task-definition \
-            --task-definition "${ECS_WEB_TASK_DEFINITION}" \
-            --query taskDefinition \
-            > /tmp/web-task-definition.json
-
       - name: Render web task definition
-        id: render-web
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: /tmp/web-task-definition.json
-          container-name: app
-          image: ${{ steps.build-image.outputs.image }}
+        env:
+          CONTAINER_IMAGE: ${{ steps.build-image.outputs.image }}
+          TASK_DEFINITION_FAMILY: ${{ env.ECS_WEB_TASK_DEFINITION }}
+        run: |
+          python terraform/aws/render_task_definition.py \
+            terraform/aws/task-definitions/web.json \
+            /tmp/web-task-definition.json
 
       - name: Deploy web service
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
-          task-definition: ${{ steps.render-web.outputs.task-definition }}
+          task-definition: /tmp/web-task-definition.json
           service: ${{ env.ECS_WEB_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
           wait-for-minutes: 10
 
-      - name: Download background worker task definition
-        if: env.ECS_WORKER_SERVICE != '' && env.ECS_WORKER_TASK_DEFINITION != ''
-        run: |
-          aws ecs describe-task-definition \
-            --task-definition "${ECS_WORKER_TASK_DEFINITION}" \
-            --query taskDefinition \
-            > /tmp/worker-task-definition.json
-
       - name: Render background worker task definition
         if: env.ECS_WORKER_SERVICE != '' && env.ECS_WORKER_TASK_DEFINITION != ''
-        id: render-worker
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: /tmp/worker-task-definition.json
-          container-name: background-worker
-          image: ${{ steps.build-image.outputs.image }}
+        env:
+          CONTAINER_IMAGE: ${{ steps.build-image.outputs.image }}
+          TASK_DEFINITION_FAMILY: ${{ env.ECS_WORKER_TASK_DEFINITION }}
+        run: |
+          python terraform/aws/render_task_definition.py \
+            terraform/aws/task-definitions/background-worker.json \
+            /tmp/worker-task-definition.json
 
       - name: Deploy background worker service
         if: env.ECS_WORKER_SERVICE != '' && env.ECS_WORKER_TASK_DEFINITION != ''
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
-          task-definition: ${{ steps.render-worker.outputs.task-definition }}
+          task-definition: /tmp/worker-task-definition.json
           service: ${{ env.ECS_WORKER_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true

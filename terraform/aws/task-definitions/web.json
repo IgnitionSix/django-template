@@ -1,0 +1,93 @@
+{
+  "family": "${TASK_DEFINITION_FAMILY}",
+  "taskRoleArn": "${ECS_TASK_ROLE_ARN}",
+  "executionRoleArn": "${ECS_TASK_EXECUTION_ROLE_ARN}",
+  "networkMode": "awsvpc",
+  "containerDefinitions": [
+    {
+      "name": "app",
+      "image": "${CONTAINER_IMAGE}",
+      "essential": true,
+      "portMappings": [
+        {
+          "name": "${CONTAINER_PORT_MAPPING_NAME}",
+          "containerPort": "${CONTAINER_PORT}",
+          "hostPort": "${CONTAINER_PORT}",
+          "protocol": "tcp",
+          "appProtocol": "http"
+        }
+      ],
+      "environment": [
+        {
+          "name": "DJANGO_SETTINGS_MODULE",
+          "value": "app.settings.production"
+        },
+        {
+          "name": "DJANGO_ALLOWED_HOSTS",
+          "value": "${DJANGO_ALLOWED_HOSTS}"
+        },
+        {
+          "name": "DJANGO_CSRF_TRUSTED_ORIGINS",
+          "value": "${DJANGO_CSRF_TRUSTED_ORIGINS}"
+        },
+        {
+          "name": "POSTGRES_DB",
+          "value": "${POSTGRES_DB}"
+        },
+        {
+          "name": "POSTGRES_USER",
+          "value": "${POSTGRES_USER}"
+        },
+        {
+          "name": "POSTGRES_HOST",
+          "value": "${POSTGRES_HOST}"
+        },
+        {
+          "name": "POSTGRES_PORT",
+          "value": "${POSTGRES_PORT}"
+        },
+        {
+          "name": "POSTGRES_CONN_MAX_AGE",
+          "value": "60"
+        },
+        {
+          "name": "REDIS_URL",
+          "value": "${REDIS_URL}"
+        },
+        {
+          "name": "SECURE_SSL_REDIRECT",
+          "value": "${SECURE_SSL_REDIRECT}"
+        },
+        {
+          "name": "SECURE_HSTS_SECONDS",
+          "value": "${SECURE_HSTS_SECONDS}"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DJANGO_SECRET_KEY",
+          "valueFrom": "${DJANGO_SECRET_KEY_SECRET_ARN}"
+        },
+        {
+          "name": "POSTGRES_PASSWORD",
+          "valueFrom": "${DATABASE_SECRET_ARN}:password::"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "${ECS_LOG_GROUP}",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "app"
+        }
+      }
+    }
+  ],
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "${TASK_CPU}",
+  "memory": "${TASK_MEMORY}",
+  "runtimePlatform": {
+    "cpuArchitecture": "${TASK_CPU_ARCHITECTURE}",
+    "operatingSystemFamily": "${TASK_OPERATING_SYSTEM_FAMILY}"
+  }
+}
